@@ -202,7 +202,13 @@ let apply (subs: substitutions) (t: typeScheme) : typeScheme =
 |   resolve types of all expressions in our program.               |
 |******************************************************************)
 let rec unify (constraints: (typeScheme * typeScheme) list) : substitutions =
-  []
+  match constraints with
+  | [] -> []
+  | (TBool, TBool) :: constraints' -> unify constraints'
+  | (TNum, TNum) :: constraints' -> unify constraints'
+  | (T a, T b) :: constraints' when a=b -> unify constraints'
+  | (TFun (a, b), TFun (c, d)) :: constraints' when (a=c && b=d) -> unify ((a,c)::(b,d)::constraints')
+  | _ -> failwith "Unification failed"
 
 (* applies a final set of substitutions on the annotated expr *)
 let rec apply_expr (subs: substitutions) (ae: aexpr): aexpr =
