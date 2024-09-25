@@ -201,14 +201,29 @@ let apply (subs: substitutions) (t: typeScheme) : typeScheme =
 | - In the end we get a complete list of substitutions that helps  |
 |   resolve types of all expressions in our program.               |
 |******************************************************************)
+
+(* Occurs check helper *)
+let rec occurs_check (x: string) (t: typeScheme) : bool =
+  match t with
+  | TNum | TBool | TStr -> false
+  | T c -> c = x
+  | TFun(t1, t2) -> occurs_check x t1 || occurs_check x t2
+;;
 let rec unify (constraints: (typeScheme * typeScheme) list) : substitutions =
   match constraints with
   | [] -> []
-  | (TBool, TBool) :: constraints' -> unify constraints'
-  | (TNum, TNum) :: constraints' -> unify constraints'
-  | (T a, T b) :: constraints' when a=b -> unify constraints'
-  | (TFun (a, b), TFun (c, d)) :: constraints' when (a=c && b=d) -> unify ((a,c)::(b,d)::constraints')
+  | (TBool, TBool) :: constraints'
+  | (TNum, TNum) :: constraints'
+  | (TStr, TStr) :: constraints' -> unify constraints'
+  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify ((a,c)::(b,d)::constraints')
+  | (T a, t) :: constraints'
+  | (t, T a) :: constraints' ->
+    if t = T a then unify constraints'
+    else if occurs_check a t then raise OccursCheckException
+    else
+      let constraints'' = List.map (fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in (a,t) :: (unify constraints'')
   | _ -> failwith "Unification failed"
+;;
 
 (* applies a final set of substitutions on the annotated expr *)
 let rec apply_expr (subs: substitutions) (ae: aexpr): aexpr =
