@@ -215,13 +215,21 @@ let rec unify (constraints: (typeScheme * typeScheme) list) : substitutions =
   | (TBool, TBool) :: constraints'
   | (TNum, TNum) :: constraints'
   | (TStr, TStr) :: constraints' -> unify constraints'
-  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify ((a,c)::(b,d)::constraints')
+  | (TFun (a, b), TFun (c, d)) :: constraints' ->
+    (* Debugging output for function types *)
+    Printf.printf "Unifying function types: %s -> %s with %s -> %s\n"
+      (string_of_type a) (string_of_type b) (string_of_type c) (string_of_type d);
+    unify ((a, c) :: (b, d) :: constraints')
   | (T a, t) :: constraints'
   | (t, T a) :: constraints' ->
     if t = T a then unify constraints'
     else if occurs_check a t then raise OccursCheckException
     else
-      let constraints'' = List.map (fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in (a,t) :: (unify constraints'')
+      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in
+      let subs = (a, t) :: (unify constraints'') in
+      (* Print each substitution as it's made *)
+      Printf.printf "Substituting %s with %s\n" a (string_of_type t);
+      subs
   | _ -> failwith "Unification failed"
 ;;
 
@@ -248,9 +256,11 @@ let infer (e: expr) : typeScheme =
   (*let _ = print_string "\n"; print_string (string_of_constraints constraints) in
   let _ = print_string "\n"; print_string (string_of_aexpr ae) in *)
   let subs = unify constraints in
+  type_variable := (Char.code 'a');
   (* let _ = print_string "\n"; print_string (string_of_subs subs) in *)
   (* reset the type counter after completing inference *)
-  type_variable := (Char.code 'a');
+  let inferred_type = apply subs t in 
   (* apply_expr subs annotated_expr *)
-  apply subs t
+  Printf.printf "Inferred type: %s\n" (string_of_type inferred_type);
+  inferred_type
 ;;
