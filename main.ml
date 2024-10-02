@@ -151,6 +151,7 @@ let public_constraint_solving _ =
   let e = (FunctionCall(Fun("x", FunctionCall(ID "x", Int 1)), Fun("x", Binop(Add, ID "x", Int 1)))) in
   let _, _, constraints = gen [] e in
   let student =  unify constraints in
+  Printf.printf "student: %s\n" (string_of_subs student);
   let result = [("f", TNum); ("c", TNum); ("d", TNum); ("e", TNum); ("a", TFun(TNum, TNum)); ("b", TNum)] in
   let f x y = if x < y then -1 else if x = y then 0 else 1 in
   assert (List.sort f student = List.sort f result)
@@ -160,6 +161,7 @@ let public_constraint_solving_1 _ =
     (TFun(T "p", TFun(T "p", T "q")), TFun(T "q", TFun(T "r", TNum)))
   ] in
   let student =  unify constraints in
+  Printf.printf "student:\n %s\n" (string_of_subs student);
   let result = [("p", TNum); ("q", TNum); ("r", TNum)] in
   let f x y = if x < y then -1 else if x = y then 0 else 1 in
   assert (List.sort f student = List.sort f result)
@@ -173,6 +175,7 @@ let public_constraint_solving_2 _ =
     (TFun(T "b", T "c"), TFun(TNum, T "e"))
   ] in
   let student =  unify constraints in
+  Printf.printf "student: %s\n" (string_of_subs student);
   let result = [("c", TNum); ("d", TNum); ("e", TNum); ("a", TFun(TNum, TNum)); ("b", TNum)] in
   let f x y = if x < y then -1 else if x = y then 0 else 1 in
   assert (List.sort f student = List.sort f result)

@@ -225,16 +225,16 @@ let rec unify (constraints: (typeScheme * typeScheme) list) : substitutions =
     unify constraints'
   | (TFun (a, b), TFun (c, d)) :: constraints' -> unify ((a, c) :: (b, d) :: constraints')
   | (T a, t) :: constraints' | (t, T a) :: constraints' ->
-    Printf.printf "Attempting to unify %s with %s\n" (string_of_type (T a)) (string_of_type t);
+    Printf.printf "Attempting to unify %s with %s...\t\t\t" (string_of_type (T a)) (string_of_type t);
     if t = T a then
       let () = Printf.printf "Skipping unification as they are equal\n" in
       (a,t) :: unify constraints'
     else if occurs_check a t then
       raise OccursCheckException
     else
-      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in 
-      let subs = (a, t) :: (unify constraints'') in
-      subs
+      let () = Printf.printf "Unifying %s with %s\n" (a) (string_of_type t) in
+      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in
+      (a, t) :: (unify constraints'')
   | _ -> failwith "Unification failed"
 ;;
 
