@@ -183,7 +183,7 @@ let rec substitute (u: typeScheme) (x: string) (t: typeScheme) : typeScheme =
 |   the given type t.                                              |
 |******************************************************************)
 let apply (subs: substitutions) (t: typeScheme) : typeScheme =
-  List.fold_right (fun (x, u) t -> substitute u x t) subs t
+  List.fold_left (fun t (x, u) -> substitute u x t) t subs
 ;;
 
 
@@ -218,22 +218,17 @@ let rec update_subs (subs: substitutions) (a: string) (t: typeScheme) : substitu
   ) subs
 
 let rec unify (constraints: (typeScheme * typeScheme) list) : substitutions =
-  Printf.printf "Constraints: %s\n" (string_of_constraints constraints);
   match constraints with
   | [] -> []
   | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' -> unify constraints'
-  | (TFun (a, b), TFun (c, d)) :: constraints' ->
-    Printf.printf "Unifying function types: %s -> %s with %s -> %s\n" (string_of_type a) (string_of_type b) (string_of_type c) (string_of_type d);
-    unify ((a, c) :: (b, d) :: constraints')
+  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify ((a, c) :: (b, d) :: constraints')
   | (T a, t) :: constraints' | (t, T a) :: constraints' ->
-    Printf.printf "Checking constraints: t: %s with a: %s\n" (string_of_type t) (a);
-
     if t = T a then unify constraints'
     else if occurs_check a t then raise OccursCheckException
     else
-      let substituted_constraints = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in
-      let subs = unify substituted_constraints in
-      (a, t) :: (List.map (fun (x, s) -> (x, substitute t a s)) subs)
+      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in 
+      let subs = (a, t) :: (unify constraints'') in
+      subs
   | _ -> failwith "Unification failed"
 ;;
 
