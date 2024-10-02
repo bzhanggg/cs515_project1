@@ -183,7 +183,7 @@ let rec substitute (u: typeScheme) (x: string) (t: typeScheme) : typeScheme =
 |   the given type t.                                              |
 |******************************************************************)
 let apply (subs: substitutions) (t: typeScheme) : typeScheme =
-  List.fold_left (fun t (x, u) -> substitute u x t) t subs
+  List.fold_right (fun (x, u) t -> substitute u x t) subs t
 ;;
 
 
@@ -216,26 +216,41 @@ let rec update_subs (subs: substitutions) (a: string) (t: typeScheme) : substitu
     let u' = substitute t a u in
     (x', u')
   ) subs
+;;
 
-let rec unify (constraints: (typeScheme * typeScheme) list) : substitutions =
+let rec unify_helper (constraints: (typeScheme * typeScheme) list) : substitutions =
   match constraints with
   | [] -> []
   | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' ->
     Printf.printf "Unifying concrete types: %s = %s\n" (string_of_type TBool) (string_of_type TBool);
-    unify constraints'
-  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify ((a, c) :: (b, d) :: constraints')
+    unify_helper constraints'
+  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify_helper ((a, c) :: (b, d) :: constraints')
   | (T a, t) :: constraints' | (t, T a) :: constraints' ->
     Printf.printf "Attempting to unify %s with %s...\t\t\t" (string_of_type (T a)) (string_of_type t);
     if t = T a then
       let () = Printf.printf "Skipping unification as they are equal\n" in
-      (a,t) :: unify constraints'
+      unify_helper constraints'
     else if occurs_check a t then
       raise OccursCheckException
     else
       let () = Printf.printf "Unifying %s with %s\n" (a) (string_of_type t) in
       let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in
-      (a, t) :: (unify constraints'')
+      (a, t) :: (unify_helper constraints'')
   | _ -> failwith "Unification failed"
+;;
+
+let rec unify (subs : substitutions) (constraints: (typeScheme * typeScheme) list) : substitutions =
+  match unify_helper constraints with
+  | [] -> subs
+  | new_subs ->
+    let updated_subs = List.fold_left (fun acc (a, t) ->
+      let updated = List.map (fun (x, u) -> (x, substitute t a u)) acc in
+      (a, t) :: updated
+    ) subs new_subs in
+    let substituted_constraints = List.map (fun (t1, t2) ->
+      List.fold_left (fun (t1', t2') (a, t) -> (substitute t a t1' , substitute t a t2')) (t1, t2) updated_subs
+    ) constraints in
+    unify updated_subs substituted_constraints
 ;;
 
 (* applies a final set of substitutions on the annotated expr *)
@@ -260,7 +275,7 @@ let infer (e: expr) : typeScheme =
   let ae, t, constraints = gen env e in
   (*let _ = print_string "\n"; print_string (string_of_constraints constraints) in
   let _ = print_string "\n"; print_string (string_of_aexpr ae) in *)
-  let subs = unify constraints in
+  let subs = unify [] constraints in
   type_variable := (Char.code 'a');
   (* let _ = print_string "\n"; print_string (string_of_subs subs) in *)
   (* reset the type counter after completing inference *)
