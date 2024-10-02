@@ -260,6 +260,6 @@ let infer (e: expr) : typeScheme =
   (* reset the type counter after completing inference *)
   let inferred_type = apply subs t in 
   (* apply_expr subs annotated_expr *)
-  Printf.printf "Inferred type: %s\n" (string_of_type inferred_type);
+  (*Printf.printf "Inferred type: %s\n" (string_of_type inferred_type);*)
   inferred_type
 ;;
