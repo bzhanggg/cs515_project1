@@ -206,9 +206,10 @@ let apply (subs: substitutions) (t: typeScheme) : typeScheme =
 let rec occurs_check (x: string) (t: typeScheme) : bool =
   match t with
   | TNum | TBool | TStr -> false
-  | T c -> c = x
+  | T y -> x = y
   | TFun(t1, t2) -> occurs_check x t1 || occurs_check x t2
 ;;
+
 let rec unify (constraints: (typeScheme * typeScheme) list) : substitutions =
   match constraints with
   | [] -> []
