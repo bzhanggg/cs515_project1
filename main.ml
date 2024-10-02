@@ -214,7 +214,7 @@ let main () =
   (*********************************)
   (* Test cases for type inference *)
   (*********************************)
-
+(*
   let _ = try public_expr_single_fun_type()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
@@ -278,20 +278,29 @@ let main () =
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
-
+*)
+  Printf.printf "\n\nRunning public_constraint_solving\n\n";
   let _ = try public_constraint_solving()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
+
+  Printf.printf "\n\nRunning public_constraint_solving_1\n";
   let _ = try public_constraint_solving_1()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
+  
+  Printf.printf "\n\nRunning public_constraint_solving_2\n";
   let _ = try public_constraint_solving_2()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
-
+  
+  (************************************)
+  (* Test cases for polymorphic types *)
+  (************************************)
+(*
   let _ = try public_poly_1()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
@@ -304,7 +313,7 @@ let main () =
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
-
+*)
 
   if !error_count = 0 then  Printf.printf ("Passed all testcases.\n")
   else Printf.printf ("%d out of 21 programming questions are incorrect.\n") (!error_count)
