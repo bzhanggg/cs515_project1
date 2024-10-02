@@ -210,27 +210,30 @@ let rec occurs_check (x: string) (t: typeScheme) : bool =
   | TFun(t1, t2) -> occurs_check x t1 || occurs_check x t2
 ;;
 
+let rec update_subs (subs: substitutions) (a: string) (t: typeScheme) : substitutions =
+  List.map (fun (x, u) -> 
+    let x' = if x = a then string_of_type t else x in
+    let u' = substitute t a u in
+    (x', u')
+  ) subs
+
 let rec unify (constraints: (typeScheme * typeScheme) list) : substitutions =
+  Printf.printf "Constraints: %s\n" (string_of_constraints constraints);
   match constraints with
   | [] -> []
-  | (TBool, TBool) :: constraints'
-  | (TNum, TNum) :: constraints'
-  | (TStr, TStr) :: constraints' -> unify constraints'
+  | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' -> unify constraints'
   | (TFun (a, b), TFun (c, d)) :: constraints' ->
-    (* Debugging output for function types *)
-    Printf.printf "Unifying function types: %s -> %s with %s -> %s\n"
-      (string_of_type a) (string_of_type b) (string_of_type c) (string_of_type d);
+    Printf.printf "Unifying function types: %s -> %s with %s -> %s\n" (string_of_type a) (string_of_type b) (string_of_type c) (string_of_type d);
     unify ((a, c) :: (b, d) :: constraints')
-  | (T a, t) :: constraints'
-  | (t, T a) :: constraints' ->
+  | (T a, t) :: constraints' | (t, T a) :: constraints' ->
+    Printf.printf "Checking constraints: t: %s with a: %s\n" (string_of_type t) (a);
+
     if t = T a then unify constraints'
     else if occurs_check a t then raise OccursCheckException
     else
-      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in
-      let subs = (a, t) :: (unify constraints'') in
-      (* Print each substitution as it's made *)
-      Printf.printf "Substituting %s with %s\n" a (string_of_type t);
-      subs
+      let substituted_constraints = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in
+      let subs = unify substituted_constraints in
+      (a, t) :: (List.map (fun (x, s) -> (x, substitute t a s)) subs)
   | _ -> failwith "Unification failed"
 ;;
 
