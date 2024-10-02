@@ -221,21 +221,13 @@ let rec update_subs (subs: substitutions) (a: string) (t: typeScheme) : substitu
 let rec unify_helper (constraints: (typeScheme * typeScheme) list) : substitutions =
   match constraints with
   | [] -> []
-  | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' ->
-    Printf.printf "Unifying concrete types: %s = %s\n" (string_of_type TBool) (string_of_type TBool);
-    unify_helper constraints'
+  | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' -> unify_helper constraints'
   | (TFun (a, b), TFun (c, d)) :: constraints' -> unify_helper ((a, c) :: (b, d) :: constraints')
   | (T a, t) :: constraints' | (t, T a) :: constraints' ->
-    Printf.printf "Attempting to unify %s with %s...\t\t\t" (string_of_type (T a)) (string_of_type t);
-    if t = T a then
-      let () = Printf.printf "Skipping unification as they are equal\n" in
-      unify_helper constraints'
-    else if occurs_check a t then
-      raise OccursCheckException
+    if t = T a then unify_helper constraints'
+    else if occurs_check a t then raise OccursCheckException
     else
-      let () = Printf.printf "Unifying %s with %s\n" (a) (string_of_type t) in
-      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in
-      (a, t) :: (unify_helper constraints'')
+      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in (a, t) :: (unify_helper constraints'')
   | _ -> failwith "Unification failed"
 ;;
 
@@ -279,9 +271,9 @@ let infer (e: expr) : typeScheme =
   type_variable := (Char.code 'a');
   (* let _ = print_string "\n"; print_string (string_of_subs subs) in *)
   (* reset the type counter after completing inference *)
-  Printf.printf "Subs: %s\n" (string_of_subs subs);
+  (* Printf.printf "Subs: %s\n" (string_of_subs subs); *)
   let inferred_type = apply subs t in 
   (* apply_expr subs annotated_expr *)
-  Printf.printf "Inferred type: %s\n" (string_of_type inferred_type);
+  (* Printf.printf "Inferred type: %s\n" (string_of_type inferred_type); *)
   inferred_type
 ;;
