@@ -218,21 +218,21 @@ let rec update_subs (subs: substitutions) (a: string) (t: typeScheme) : substitu
   ) subs
 ;;
 
-let rec unify_helper (constraints: (typeScheme * typeScheme) list) : substitutions =
+let rec unify_cons (constraints: (typeScheme * typeScheme) list) : substitutions =
   match constraints with
   | [] -> []
-  | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' -> unify_helper constraints'
-  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify_helper ((a, c) :: (b, d) :: constraints')
+  | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' -> unify_cons constraints'
+  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify_cons ((a, c) :: (b, d) :: constraints')
   | (T a, t) :: constraints' | (t, T a) :: constraints' ->
-    if t = T a then unify_helper constraints'
+    if t = T a then unify_cons constraints'
     else if occurs_check a t then raise OccursCheckException
     else
-      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in (a, t) :: (unify_helper constraints'')
+      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in (a, t) :: (unify_cons constraints'')
   | _ -> failwith "Unification failed"
 ;;
 
-let rec unify (subs : substitutions) (constraints: (typeScheme * typeScheme) list) : substitutions =
-  match unify_helper constraints with
+let rec unify_subs (subs : substitutions) (constraints: (typeScheme * typeScheme) list) : substitutions =
+  match unify_cons constraints with
   | [] -> subs
   | new_subs ->
     let updated_subs = List.fold_left (fun acc (a, t) ->
@@ -242,8 +242,10 @@ let rec unify (subs : substitutions) (constraints: (typeScheme * typeScheme) lis
     let substituted_constraints = List.map (fun (t1, t2) ->
       List.fold_left (fun (t1', t2') (a, t) -> (substitute t a t1' , substitute t a t2')) (t1, t2) updated_subs
     ) constraints in
-    unify updated_subs substituted_constraints
+    unify_subs updated_subs substituted_constraints
 ;;
+
+let unify (constraints: (typeScheme * typeScheme) list) : substitutions = unify_subs [] constraints;;
 
 (* applies a final set of substitutions on the annotated expr *)
 let rec apply_expr (subs: substitutions) (ae: aexpr): aexpr =
@@ -267,7 +269,7 @@ let infer (e: expr) : typeScheme =
   let ae, t, constraints = gen env e in
   (*let _ = print_string "\n"; print_string (string_of_constraints constraints) in
   let _ = print_string "\n"; print_string (string_of_aexpr ae) in *)
-  let subs = unify [] constraints in
+  let subs = unify constraints in
   type_variable := (Char.code 'a');
   (* let _ = print_string "\n"; print_string (string_of_subs subs) in *)
   (* reset the type counter after completing inference *)

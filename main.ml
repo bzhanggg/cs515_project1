@@ -150,7 +150,7 @@ let public_complex_type _ =
 let public_constraint_solving _ =
   let e = (FunctionCall(Fun("x", FunctionCall(ID "x", Int 1)), Fun("x", Binop(Add, ID "x", Int 1)))) in
   let _, _, constraints = gen [] e in
-  let student =  unify [] constraints in
+  let student =  unify constraints in
   let result = [("f", TNum); ("c", TNum); ("d", TNum); ("e", TNum); ("a", TFun(TNum, TNum)); ("b", TNum)] in
   let f x y = if x < y then -1 else if x = y then 0 else 1 in
   assert (List.sort f student = List.sort f result)
@@ -159,7 +159,7 @@ let public_constraint_solving_1 _ =
   let constraints = [
     (TFun(T "p", TFun(T "p", T "q")), TFun(T "q", TFun(T "r", TNum)))
   ] in
-  let student =  unify [] constraints in
+  let student =  unify constraints in
   let result = [("p", TNum); ("q", TNum); ("r", TNum)] in
   let f x y = if x < y then -1 else if x = y then 0 else 1 in
   assert (List.sort f student = List.sort f result)
@@ -172,7 +172,7 @@ let public_constraint_solving_2 _ =
     (TNum, T "c");
     (TFun(T "b", T "c"), TFun(TNum, T "e"))
   ] in
-  let student =  unify [] constraints in
+  let student =  unify constraints in
   let result = [("c", TNum); ("d", TNum); ("e", TNum); ("a", TFun(TNum, TNum)); ("b", TNum)] in
   let f x y = if x < y then -1 else if x = y then 0 else 1 in
   assert (List.sort f student = List.sort f result)
@@ -244,6 +244,7 @@ let main () =
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
+
   let _ = try public_expr_ho_type()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
@@ -276,6 +277,7 @@ let main () =
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
+
   let _ = try public_constraint_solving()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
@@ -288,10 +290,7 @@ let main () =
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
-  
-  (************************************)
-  (* Test cases for polymorphic types *)
-  (************************************)
+
   let _ = try public_poly_1()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
@@ -304,6 +303,7 @@ let main () =
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
+
 
   if !error_count = 0 then  Printf.printf ("Passed all testcases.\n")
   else Printf.printf ("%d out of 21 programming questions are incorrect.\n") (!error_count)
