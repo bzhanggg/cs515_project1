@@ -186,6 +186,49 @@ let apply (subs: substitutions) (t: typeScheme) : typeScheme =
   List.fold_right (fun (x, u) t -> substitute u x t) subs t
 ;;
 
+(******************************************************************|
+|****************   Polymorphic Type Inference   ******************|
+|******************************************************************)
+
+(* find free variables and put into a list *)
+let rec free_vars (t: typeScheme) : string list =
+  match t with
+  | TNum | TStr | TBool -> []
+  | T s -> [s]
+  | TFun(t1, t2) -> free_vars t1 @ free_vars t2
+  | TPoly(_, _) -> failwith "TPoly in a free variable"
+;;
+
+(* find all free variables in the current environment *)
+let rec free_vars_env (env: environment) : string list =
+  List.fold_left (fun acc (_, t) -> acc @ free_vars t) [] env
+;;
+
+(* take the current environment and type and return polymorphic type scheme of free variables *)
+let generalize (env: environment) (t: typeScheme) : typeScheme =
+  let env_free_vars = free_vars_env env in
+  let type_free_vars = free_vars t in
+  let poly_vars = List.filter (fun v -> not (List.mem v env_free_vars)) type_free_vars in
+  if poly_vars = [] then t
+  else TPoly(poly_vars, t)
+;;
+
+(* instantiate polymorphic type variables with fresh type variables when using a polymorphic type *)
+let rec instantiate (t: typeScheme) : typeScheme =
+  let fresh_vars = Hashtbl.create 10 in
+  let rec inst (t: typeScheme) =
+    match t with
+    | TNum | TBool | TStr -> t
+    | T v ->
+      if Hashtbl.mem fresh_vars v then Hashtbl.find fresh_vars v
+      else
+        let fresh = gen_new_type () in Hashtbl.add fresh_vars v fresh; fresh
+    | TFun(t1, t2) -> TFun(inst t1, inst t2)
+    | TPoly(vars, body) ->
+      List.iter (fun v -> Hashtbl.add fresh_vars v (gen_new_type ())) vars;
+     inst body
+  in inst t
+;;
 
 (******************************************************************|
 |***************************   Unify   ****************************|

@@ -20,12 +20,13 @@ module CharMap = Map.Make(String)
 type genericMap = int CharMap.t
 
 type typeScheme =
-    | TNum
-    | TBool
-    | TStr
-    | T of string
-    | TFun of typeScheme * typeScheme
-
+  | TNum
+  | TBool
+  | TStr
+  | T of string
+  | TFun of typeScheme * typeScheme
+  | TPoly of string list * typeScheme
+;;
 
 (* annotated expr -> expr with types *)
 type aexpr =
@@ -63,8 +64,11 @@ let string_of_type (t: typeScheme) =
     | T(x) -> x
     | TFun(t1, t2) -> let st1 = aux t1  in
       let st2 = aux t2 in
-      (Printf.sprintf "(%s -> %s)" st1 st2) in
-  let s = aux t in s
+      (Printf.sprintf "(%s -> %s)" st1 st2)
+    | TPoly(vars, t') ->
+      let vars_str = String.concat ", " vars in
+      Printf.sprintf "∀%s. %s" vars_str (aux t') in
+      let s = aux t in s
 ;;
 
 (* annotated expression to string *)
@@ -149,6 +153,7 @@ let pp_string_of_type (t: typeScheme) =
     | TNum -> "int", chr, map
     | TBool -> "bool", chr, map
     | TStr -> "string", chr, map
+    | TPoly (_, _) -> "poly", chr, map
     | T(x) ->
       let gen_chr, new_chr, new_map = if CharMap.mem x map
         then Char.escaped (Char.chr (CharMap.find x map)), chr, map
