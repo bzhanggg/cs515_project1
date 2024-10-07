@@ -31,6 +31,98 @@ let string_of_constraints (constraints: (typeScheme * typeScheme) list) =
 let string_of_subs (subs: substitutions) =
   List.fold_left (fun acc (s, t) -> Printf.sprintf "%s%s: %s\n" acc s (string_of_type t)) "" subs
 
+(******************************************************************|
+|**********************   Unification   ***************************|
+|**********************    Algorithm    ***************************|
+|******************************************************************)
+
+
+(******************************************************************|
+|**********************   Substitute   ****************************|
+|******************************************************************|
+|Arguments:                                                        |
+|   t -> type in which substitutions have to be made.              |
+|   (x, u) -> (type placeholder, resolved substitution)            |
+|******************************************************************|
+|Returns:                                                          |
+|   returns a valid substitution for t if present, else t as it is.|
+|******************************************************************|
+|- In this method we are given a substitution rule that asks us to |
+|  replace all occurrences of type placeholder x with u, in t.     |
+|- We are required to apply this substitution to t recursively, so |
+|  if t is a composite type that contains multiple occurrences of  |
+|  x then at every position of x, a u is to be substituted.        |
+*******************************************************************)
+let rec substitute (u: typeScheme) (x: string) (t: typeScheme) : typeScheme =
+  match t with
+  | TNum | TBool | TStr -> t
+  | T(c) -> if c = x then u else t
+  | TFun(t1, t2) -> TFun(substitute u x t1, substitute u x t2)
+  | TPoly(vars, t') ->
+    if List.mem x vars then t
+    else TPoly(vars, substitute u x t')
+;;
+
+(******************************************************************|
+|*************************    Apply    ****************************|
+|******************************************************************|
+| Arguments:                                                       |
+|   subs -> list of substitution rules.                            |
+|   t -> type in which substitutions have to be made.              |
+|******************************************************************|
+| Returns:                                                         |
+|   returns t after all the substitutions have been made in it     |
+|   given by all the substitution rules in subs.                   |
+|******************************************************************|
+| - Works from right to left                                       |
+| - Effectively what this function does is that it uses            |
+|   substitution rules generated from the unification algorithm and|
+|   applies it to t. Internally it calls the substitute function   |
+|   which does the actual substitution and returns the resultant   |
+|   type after substitutions.                                      |
+| - Substitution rules: (type placeholder, typeScheme), where we   |
+|   have to replace each occurrence of the type placeholder with   |
+|   the given type t.                                              |
+|******************************************************************)
+let apply (subs: substitutions) (t: typeScheme) : typeScheme =
+  List.fold_right (fun (x, u) t -> substitute u x t) subs t
+;;
+
+(******************************************************************|
+|****************   Polymorphic Type Inference   ******************|
+|******************************************************************)
+
+(* create polymorphic type by replacing all variables with fresh types*)
+let rec instantiate (ty_scheme: typeScheme) : typeScheme =
+  match ty_scheme with
+  | TPoly(vars, t) ->
+    let subst = List.map (fun v -> (v, gen_new_type ())) vars in
+    List.fold_left (fun acc (v, fresh_ty) -> substitute fresh_ty v acc) t subst
+  | _ -> ty_scheme
+;;
+
+(* get free type variables from a type *)
+let rec free_type_vars (t: typeScheme) : string list =
+  match t with
+  | TNum | TBool | TStr -> []
+  | T x -> [x]
+  | TFun(t1, t2) -> (free_type_vars t1) @ (free_type_vars t2)
+  | TPoly(vars, t') -> List.filter (fun v -> not (List.mem v vars)) (free_type_vars t')
+;;
+
+let free_vars_in_env (env: environment) : string list =
+  List.fold_left (fun acc (_, ty) -> acc @ free_type_vars ty) [] env
+;;
+
+(* quantify free type variables *)
+let generalize (env: environment) (t: typeScheme) : typeScheme = 
+  let env_vars = free_vars_in_env env in
+  let free_vars = free_type_vars t in
+  let to_generalize = List.filter (fun v -> not (List.mem v env_vars)) free_vars in
+  if to_generalize = [] then t
+  else TPoly(to_generalize, t)
+;;
+
 (*********************************************************************|
 |******************   Annotate Expressions   *************************|
 |*********************************************************************|
@@ -80,7 +172,9 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
   | String s -> AString(s, TStr), TStr, []
   | ID x ->
     if List.mem_assoc x env
-    then AID(x, List.assoc x env), List.assoc x env, []
+    then
+      let t = instantiate (List.assoc x env) in
+      AID(x, t), t, []
     else raise UndefinedVar
   | Fun(id, e) ->
     let tid = gen_new_type () in
@@ -120,115 +214,17 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
     let q = fnq @ argq @ [(fnty, TFun(argty, t))] in
     AFunctionCall(afn, aarg, t), t, q
   | Let (id, b, e1, e2) ->
-    let ae1, t1, q1 =
-      if b then
-        let tid = gen_new_type () in
-        let env' = (id, tid)::env in
-        gen env' e1
-      else
-        gen env e1 in
-    let env' = (id, t1)::env in
-    let ae2, t2, q2 = gen env' e2 in
-    ALet (id, b, ae1, ae2, t2), t2, q1 @ q2
-
-
-(******************************************************************|
-|**********************   Unification   ***************************|
-|**********************    Algorithm    ***************************|
-|******************************************************************)
-
-
-(******************************************************************|
-|**********************   Substitute   ****************************|
-|******************************************************************|
-|Arguments:                                                        |
-|   t -> type in which substitutions have to be made.              |
-|   (x, u) -> (type placeholder, resolved substitution)            |
-|******************************************************************|
-|Returns:                                                          |
-|   returns a valid substitution for t if present, else t as it is.|
-|******************************************************************|
-|- In this method we are given a substitution rule that asks us to |
-|  replace all occurrences of type placeholder x with u, in t.     |
-|- We are required to apply this substitution to t recursively, so |
-|  if t is a composite type that contains multiple occurrences of  |
-|  x then at every position of x, a u is to be substituted.        |
-*******************************************************************)
-let rec substitute (u: typeScheme) (x: string) (t: typeScheme) : typeScheme =
-  match t with
-  | TNum | TBool | TStr -> t
-  | T(c) -> if c = x then u else t
-  | TFun(t1, t2) -> TFun(substitute u x t1, substitute u x t2)
-;;
-
-(******************************************************************|
-|*************************    Apply    ****************************|
-|******************************************************************|
-| Arguments:                                                       |
-|   subs -> list of substitution rules.                            |
-|   t -> type in which substitutions have to be made.              |
-|******************************************************************|
-| Returns:                                                         |
-|   returns t after all the substitutions have been made in it     |
-|   given by all the substitution rules in subs.                   |
-|******************************************************************|
-| - Works from right to left                                       |
-| - Effectively what this function does is that it uses            |
-|   substitution rules generated from the unification algorithm and|
-|   applies it to t. Internally it calls the substitute function   |
-|   which does the actual substitution and returns the resultant   |
-|   type after substitutions.                                      |
-| - Substitution rules: (type placeholder, typeScheme), where we   |
-|   have to replace each occurrence of the type placeholder with   |
-|   the given type t.                                              |
-|******************************************************************)
-let apply (subs: substitutions) (t: typeScheme) : typeScheme =
-  List.fold_right (fun (x, u) t -> substitute u x t) subs t
-;;
-
-(******************************************************************|
-|****************   Polymorphic Type Inference   ******************|
-|******************************************************************)
-
-(* find free variables and put into a list *)
-let rec free_vars (t: typeScheme) : string list =
-  match t with
-  | TNum | TStr | TBool -> []
-  | T s -> [s]
-  | TFun(t1, t2) -> free_vars t1 @ free_vars t2
-  | TPoly(_, _) -> failwith "TPoly in a free variable"
-;;
-
-(* find all free variables in the current environment *)
-let rec free_vars_env (env: environment) : string list =
-  List.fold_left (fun acc (_, t) -> acc @ free_vars t) [] env
-;;
-
-(* take the current environment and type and return polymorphic type scheme of free variables *)
-let generalize (env: environment) (t: typeScheme) : typeScheme =
-  let env_free_vars = free_vars_env env in
-  let type_free_vars = free_vars t in
-  let poly_vars = List.filter (fun v -> not (List.mem v env_free_vars)) type_free_vars in
-  if poly_vars = [] then t
-  else TPoly(poly_vars, t)
-;;
-
-(* instantiate polymorphic type variables with fresh type variables when using a polymorphic type *)
-let rec instantiate (t: typeScheme) : typeScheme =
-  let fresh_vars = Hashtbl.create 10 in
-  let rec inst (t: typeScheme) =
-    match t with
-    | TNum | TBool | TStr -> t
-    | T v ->
-      if Hashtbl.mem fresh_vars v then Hashtbl.find fresh_vars v
-      else
-        let fresh = gen_new_type () in Hashtbl.add fresh_vars v fresh; fresh
-    | TFun(t1, t2) -> TFun(inst t1, inst t2)
-    | TPoly(vars, body) ->
-      List.iter (fun v -> Hashtbl.add fresh_vars v (gen_new_type ())) vars;
-     inst body
-  in inst t
-;;
+    let env' = if b then (id, gen_new_type ())::env else env in
+    (* Infer type for the bound expression e1 *)
+    let ae1, t1, q1 = gen env' e1 in
+    (* Decide whether to generalize based on whether it's recursive or not *)
+    let t1' = if b then t1 else generalize env t1 in
+    (* Add the new type to the environment *)
+    let env'' = (id, t1')::env in
+    (* Infer type for the body e2 *)
+    let ae2, t2, q2 = gen env'' e2 in
+    (* Return the final annotated expression, type, and combined constraints *)
+    ALet(id, b, ae1, ae2, t2), t2, q1 @ q2
 
 (******************************************************************|
 |***************************   Unify   ****************************|
@@ -251,6 +247,9 @@ let rec occurs_check (x: string) (t: typeScheme) : bool =
   | TNum | TBool | TStr -> false
   | T y -> x = y
   | TFun(t1, t2) -> occurs_check x t1 || occurs_check x t2
+  | TPoly(vars, t') ->
+    if List.mem x vars then true
+    else occurs_check x t'
 ;;
 
 let rec update_subs (subs: substitutions) (a: string) (t: typeScheme) : substitutions =
