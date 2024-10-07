@@ -92,6 +92,26 @@ let apply (subs: substitutions) (t: typeScheme) : typeScheme =
 |****************   Polymorphic Type Inference   ******************|
 |******************************************************************)
 
+let rec has_free_vars (t: typeScheme) : bool =
+  match t with
+  | TNum | TBool | TStr -> false
+  | T _ -> true
+  | TFun (t1, t2) -> has_free_vars t1 || has_free_vars t2
+  | TPoly (vars, t_body) ->
+    let free_vars_in_body = free_vars t_body in
+    List.exists (fun v -> not (List.mem v vars)) free_vars_in_body
+  and free_vars (t: typeScheme) : string list =
+    match t with
+    | TNum | TBool | TStr -> []
+    | T v -> [v]
+    | TFun(t1, t2) ->
+      let fv1 = free_vars t1 in
+      let fv2 = free_vars t2 in
+      List.append fv1 fv2
+    | TPoly (vars, t_body) ->
+      let fv_body = free_vars t_body in
+      List.filter (fun v -> not (List.mem v vars)) fv_body
+
 (* create polymorphic type by replacing all variables with fresh types*)
 let rec instantiate (ty_scheme: typeScheme) : typeScheme =
   match ty_scheme with
@@ -116,11 +136,20 @@ let free_vars_in_env (env: environment) : string list =
 
 (* quantify free type variables *)
 let generalize (env: environment) (t: typeScheme) : typeScheme = 
+  if has_free_vars t then
+    let env_vars = free_vars_in_env env in
+    let free_vars = free_type_vars t in
+    let to_generalize = List.filter (fun v -> not (List.mem v env_vars)) free_vars in
+    TPoly(to_generalize, t)
+  else
+    t
+  (*
   let env_vars = free_vars_in_env env in
   let free_vars = free_type_vars t in
   let to_generalize = List.filter (fun v -> not (List.mem v env_vars)) free_vars in
   if to_generalize = [] then t
   else TPoly(to_generalize, t)
+  *)
 ;;
 
 (*********************************************************************|
@@ -181,10 +210,13 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
     let rty = gen_new_type () in
     let env' = (id, tid)::env in
     let ae, t, q = gen env' e in
+    Printf.printf "Inferred type for function parameter %s: %s\n" id (pp_string_of_type tid);
+    Printf.printf "Inferred return type: %s\n" (pp_string_of_type t);
     (*let t = List.assoc id env in
     let _ = List.iter (fun k v -> print_string k; print_string " "; print_string (string_of_type v); print_string "\n") env in
     let _ = print_string id; print_string " "; print_string (string_of_type t); print_string ("\n") in*)
     let q' = [(t, rty)] in
+    Printf.printf "Substituting constraint: %s = %s\n" (string_of_type t) (string_of_type rty);
     AFun(id, ae, TFun(tid, rty)), TFun(tid, rty), q @ q'
   | Not e ->
     let ae, t1, q = gen env e in
@@ -210,6 +242,8 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
   | FunctionCall(fn, arg) ->
     let afn, fnty, fnq = gen env fn in
     let aarg, argty, argq = gen env arg in
+    Printf.printf "Inferred function type: %s\n" (string_of_type fnty);
+    Printf.printf "Inferred argument type: %s\n" (string_of_type argty);
     let t = gen_new_type () in
     let q = fnq @ argq @ [(fnty, TFun(argty, t))] in
     AFunctionCall(afn, aarg, t), t, q
@@ -218,9 +252,15 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
     (* Infer type for the bound expression e1 *)
     let ae1, t1, q1 = gen env' e1 in
     (* Decide whether to generalize based on whether it's recursive or not *)
-    let t1' = if b then t1 else generalize env t1 in
+    let t1' = if b then t1
+      else begin
+        Printf.printf "Generalizing type for %s: %s\n" id (string_of_type t1);
+        generalize env t1 end in
+      Printf.printf "Generalized type for %s: %s\n" id (pp_string_of_type t1');
     (* Add the new type to the environment *)
-    let env'' = (id, t1')::env in
+    let env'' =
+      Printf.printf "Generalized type for %s: %s\n" id (string_of_type t1');
+      (id, t1')::env in
     (* Infer type for the body e2 *)
     let ae2, t2, q2 = gen env'' e2 in
     (* Return the final annotated expression, type, and combined constraints *)
@@ -282,6 +322,7 @@ let rec unify_subs (subs : substitutions) (constraints: (typeScheme * typeScheme
       (a, t) :: updated
     ) subs new_subs in
     let substituted_constraints = List.map (fun (t1, t2) ->
+      Printf.printf "Substituting constraint: %s = %s\n" (string_of_type t1) (string_of_type t2);
       List.fold_left (fun (t1', t2') (a, t) -> (substitute t a t1' , substitute t a t2')) (t1, t2) updated_subs
     ) constraints in
     unify_subs updated_subs substituted_constraints
