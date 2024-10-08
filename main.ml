@@ -216,18 +216,15 @@ let main () =
   (* Test cases for type inference *)
   (*********************************)
 
-  (*
   let _ = try public_expr_single_fun_type()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
-  *)
 
   let _ = try public_expr_add1_type()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
-  (*
   let _ = try public_expr_apply_type()
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
@@ -307,7 +304,6 @@ let main () =
     with e -> (error_count := !error_count + 1;
     let msg = Printexc.to_string e and stack = Printexc.get_backtrace () in
     Printf.eprintf "there was an error: %s %s\n" msg stack) in
-    *)
 
 
   if !error_count = 0 then  Printf.printf ("Passed all testcases.\n")

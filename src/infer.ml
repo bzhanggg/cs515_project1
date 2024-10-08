@@ -291,7 +291,7 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
       else
         gen env e1 in
     let envq1 = List.map(fun (var, t) -> (var, apply (unify q1) t)) env in 
-    let t1' = if b then t1 else generalize envq1 t1 in
+    let t1' = if b then t1 else generalize envq1 (apply (unify q1) t1) in
     let env'' = (id, t1')::env in
     let ae2, t2, q2 = gen env'' e2 in
     ALet (id, b, ae1, ae2, t2), t2, q1 @ q2
