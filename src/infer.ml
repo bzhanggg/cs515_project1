@@ -179,7 +179,6 @@ let rec unify_subs (subs : substitutions) (constraints: (typeScheme * typeScheme
       (a, t) :: updated
     ) subs new_subs in
     let substituted_constraints = List.map (fun (t1, t2) ->
-      Printf.printf "Substituting constraint: %s = %s\n" (string_of_type t1) (string_of_type t2);
       List.fold_left (fun (t1', t2') (a, t) -> (substitute t a t1' , substitute t a t2')) (t1, t2) updated_subs
     ) constraints in
     unify_subs updated_subs substituted_constraints
@@ -245,13 +244,10 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
     let rty = gen_new_type () in
     let env' = (id, tid)::env in
     let ae, t, q = gen env' e in
-    Printf.printf "Inferred type for function parameter %s: %s\n" id (pp_string_of_type tid);
-    Printf.printf "Inferred return type: %s\n" (pp_string_of_type t);
     (*let t = List.assoc id env in
     let _ = List.iter (fun k v -> print_string k; print_string " "; print_string (string_of_type v); print_string "\n") env in
     let _ = print_string id; print_string " "; print_string (string_of_type t); print_string ("\n") in*)
     let q' = [(t, rty)] in
-    Printf.printf "Substituting constraint: %s = %s\n" (string_of_type t) (string_of_type rty);
     AFun(id, ae, TFun(tid, rty)), TFun(tid, rty), q @ q'
   | Not e ->
     let ae, t1, q = gen env e in
@@ -277,8 +273,6 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
   | FunctionCall(fn, arg) ->
     let afn, fnty, fnq = gen env fn in
     let aarg, argty, argq = gen env arg in
-    Printf.printf "Inferred function type: %s\n" (string_of_type fnty);
-    Printf.printf "Inferred argument type: %s\n" (string_of_type argty);
     let t = gen_new_type () in
     let q = fnq @ argq @ [(fnty, TFun(argty, t))] in
     AFunctionCall(afn, aarg, t), t, q
@@ -290,8 +284,8 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
         gen env' e1
       else
         gen env e1 in
-    let envq1 = List.map(fun (var, t) -> (var, apply (unify q1) t)) env in 
-    let t1' = if b then t1 else generalize envq1 (apply (unify q1) t1) in
+    let env_unify = List.map(fun (var, t) -> (var, apply (unify q1) t)) env in 
+    let t1' = if b then t1 else generalize env_unify (apply (unify q1) t1) in
     let env'' = (id, t1')::env in
     let ae2, t2, q2 = gen env'' e2 in
     ALet (id, b, ae1, ae2, t2), t2, q1 @ q2

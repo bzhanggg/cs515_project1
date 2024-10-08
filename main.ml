@@ -32,7 +32,6 @@ let public_expr_apply_type _ =
   let _, prog = "let apply = fun x -> fun y -> x y in let add1 = fun z -> z + 1 in (apply add1) 5" |> tokenize |> parse_expr in
   let result = TNum in
   let student = infer prog in
-  Printf.printf("Algorithm output: %s\n") (string_of_type student);
   assert (student = result)
 
 let public_expr_double_fun_type _ =
