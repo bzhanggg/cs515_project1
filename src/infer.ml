@@ -92,26 +92,6 @@ let apply (subs: substitutions) (t: typeScheme) : typeScheme =
 |****************   Polymorphic Type Inference   ******************|
 |******************************************************************)
 
-let rec has_free_vars (t: typeScheme) : bool =
-  match t with
-  | TNum | TBool | TStr -> false
-  | T _ -> true
-  | TFun (t1, t2) -> has_free_vars t1 || has_free_vars t2
-  | TPoly (vars, t_body) ->
-    let free_vars_in_body = free_vars t_body in
-    List.exists (fun v -> not (List.mem v vars)) free_vars_in_body
-  and free_vars (t: typeScheme) : string list =
-    match t with
-    | TNum | TBool | TStr -> []
-    | T v -> [v]
-    | TFun(t1, t2) ->
-      let fv1 = free_vars t1 in
-      let fv2 = free_vars t2 in
-      List.append fv1 fv2
-    | TPoly (vars, t_body) ->
-      let fv_body = free_vars t_body in
-      List.filter (fun v -> not (List.mem v vars)) fv_body
-
 (* create polymorphic type by replacing all variables with fresh types*)
 let rec instantiate (ty_scheme: typeScheme) : typeScheme =
   match ty_scheme with
@@ -136,21 +116,76 @@ let free_vars_in_env (env: environment) : string list =
 
 (* quantify free type variables *)
 let generalize (env: environment) (t: typeScheme) : typeScheme = 
-  if has_free_vars t then
-    let env_vars = free_vars_in_env env in
-    let free_vars = free_type_vars t in
-    let to_generalize = List.filter (fun v -> not (List.mem v env_vars)) free_vars in
-    TPoly(to_generalize, t)
-  else
-    t
-  (*
   let env_vars = free_vars_in_env env in
   let free_vars = free_type_vars t in
   let to_generalize = List.filter (fun v -> not (List.mem v env_vars)) free_vars in
   if to_generalize = [] then t
   else TPoly(to_generalize, t)
-  *)
 ;;
+
+(******************************************************************|
+|***************************   Unify   ****************************|
+|******************************************************************|
+| Arguments:                                                       |
+|   constraints -> list of constraints (tuple of 2 types)          |
+|******************************************************************|
+| Returns:                                                         |
+|   returns a list of substitutions                                |
+|******************************************************************|
+| - The unify function takes a bunch of constraints it obtained    |
+|   from the collect method and turns them into substitutions.     |
+| - In the end we get a complete list of substitutions that helps  |
+|   resolve types of all expressions in our program.               |
+|******************************************************************)
+
+(* Occurs check helper *)
+let rec occurs_check (x: string) (t: typeScheme) : bool =
+  match t with
+  | TNum | TBool | TStr -> false
+  | T y -> x = y
+  | TFun(t1, t2) -> occurs_check x t1 || occurs_check x t2
+  | TPoly(vars, t') ->
+    if List.mem x vars then true
+    else occurs_check x t'
+;;
+
+let rec update_subs (subs: substitutions) (a: string) (t: typeScheme) : substitutions =
+  List.map (fun (x, u) -> 
+    let x' = if x = a then string_of_type t else x in
+    let u' = substitute t a u in
+    (x', u')
+  ) subs
+;;
+
+let rec unify_cons (constraints: (typeScheme * typeScheme) list) : substitutions =
+  match constraints with
+  | [] -> []
+  | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' -> unify_cons constraints'
+  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify_cons ((a, c) :: (b, d) :: constraints')
+  | (T a, t) :: constraints' | (t, T a) :: constraints' ->
+    if t = T a then unify_cons constraints'
+    else if occurs_check a t then raise OccursCheckException
+    else
+      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in (a, t) :: (unify_cons constraints'')
+  | _ -> failwith "Unification failed"
+;;
+
+let rec unify_subs (subs : substitutions) (constraints: (typeScheme * typeScheme) list) : substitutions =
+  match unify_cons constraints with
+  | [] -> subs
+  | new_subs ->
+    let updated_subs = List.fold_left (fun acc (a, t) ->
+      let updated = List.map (fun (x, u) -> (x, substitute t a u)) acc in
+      (a, t) :: updated
+    ) subs new_subs in
+    let substituted_constraints = List.map (fun (t1, t2) ->
+      Printf.printf "Substituting constraint: %s = %s\n" (string_of_type t1) (string_of_type t2);
+      List.fold_left (fun (t1', t2') (a, t) -> (substitute t a t1' , substitute t a t2')) (t1, t2) updated_subs
+    ) constraints in
+    unify_subs updated_subs substituted_constraints
+;;
+
+let unify (constraints: (typeScheme * typeScheme) list) : substitutions = unify_subs [] constraints;;
 
 (*********************************************************************|
 |******************   Annotate Expressions   *************************|
@@ -248,87 +283,19 @@ let rec gen (env: environment) (e: expr): aexpr * typeScheme * (typeScheme * typ
     let q = fnq @ argq @ [(fnty, TFun(argty, t))] in
     AFunctionCall(afn, aarg, t), t, q
   | Let (id, b, e1, e2) ->
-    let env' = if b then (id, gen_new_type ())::env else env in
-    (* Infer type for the bound expression e1 *)
-    let ae1, t1, q1 = gen env' e1 in
-    (* Decide whether to generalize based on whether it's recursive or not *)
-    let t1' = if b then t1
-      else begin
-        Printf.printf "Generalizing type for %s: %s\n" id (string_of_type t1);
-        generalize env t1 end in
-      Printf.printf "Generalized type for %s: %s\n" id (pp_string_of_type t1');
-    (* Add the new type to the environment *)
-    let env'' =
-      Printf.printf "Generalized type for %s: %s\n" id (string_of_type t1');
-      (id, t1')::env in
-    (* Infer type for the body e2 *)
+    let ae1, t1, q1 =
+      if b then
+        let tid = gen_new_type () in
+        let env' = (id, tid)::env in
+        gen env' e1
+      else
+        gen env e1 in
+    let envq1 = List.map(fun (var, t) -> (var, apply (unify q1) t)) env in 
+    let t1' = if b then t1 else generalize envq1 t1 in
+    let env'' = (id, t1')::env in
     let ae2, t2, q2 = gen env'' e2 in
-    (* Return the final annotated expression, type, and combined constraints *)
-    ALet(id, b, ae1, ae2, t2), t2, q1 @ q2
-
-(******************************************************************|
-|***************************   Unify   ****************************|
-|******************************************************************|
-| Arguments:                                                       |
-|   constraints -> list of constraints (tuple of 2 types)          |
-|******************************************************************|
-| Returns:                                                         |
-|   returns a list of substitutions                                |
-|******************************************************************|
-| - The unify function takes a bunch of constraints it obtained    |
-|   from the collect method and turns them into substitutions.     |
-| - In the end we get a complete list of substitutions that helps  |
-|   resolve types of all expressions in our program.               |
-|******************************************************************)
-
-(* Occurs check helper *)
-let rec occurs_check (x: string) (t: typeScheme) : bool =
-  match t with
-  | TNum | TBool | TStr -> false
-  | T y -> x = y
-  | TFun(t1, t2) -> occurs_check x t1 || occurs_check x t2
-  | TPoly(vars, t') ->
-    if List.mem x vars then true
-    else occurs_check x t'
+    ALet (id, b, ae1, ae2, t2), t2, q1 @ q2
 ;;
-
-let rec update_subs (subs: substitutions) (a: string) (t: typeScheme) : substitutions =
-  List.map (fun (x, u) -> 
-    let x' = if x = a then string_of_type t else x in
-    let u' = substitute t a u in
-    (x', u')
-  ) subs
-;;
-
-let rec unify_cons (constraints: (typeScheme * typeScheme) list) : substitutions =
-  match constraints with
-  | [] -> []
-  | (TBool, TBool) :: constraints' | (TNum, TNum) :: constraints' | (TStr, TStr) :: constraints' -> unify_cons constraints'
-  | (TFun (a, b), TFun (c, d)) :: constraints' -> unify_cons ((a, c) :: (b, d) :: constraints')
-  | (T a, t) :: constraints' | (t, T a) :: constraints' ->
-    if t = T a then unify_cons constraints'
-    else if occurs_check a t then raise OccursCheckException
-    else
-      let constraints'' = List.map(fun (t1, t2) -> (substitute t a t1, substitute t a t2)) constraints' in (a, t) :: (unify_cons constraints'')
-  | _ -> failwith "Unification failed"
-;;
-
-let rec unify_subs (subs : substitutions) (constraints: (typeScheme * typeScheme) list) : substitutions =
-  match unify_cons constraints with
-  | [] -> subs
-  | new_subs ->
-    let updated_subs = List.fold_left (fun acc (a, t) ->
-      let updated = List.map (fun (x, u) -> (x, substitute t a u)) acc in
-      (a, t) :: updated
-    ) subs new_subs in
-    let substituted_constraints = List.map (fun (t1, t2) ->
-      Printf.printf "Substituting constraint: %s = %s\n" (string_of_type t1) (string_of_type t2);
-      List.fold_left (fun (t1', t2') (a, t) -> (substitute t a t1' , substitute t a t2')) (t1, t2) updated_subs
-    ) constraints in
-    unify_subs updated_subs substituted_constraints
-;;
-
-let unify (constraints: (typeScheme * typeScheme) list) : substitutions = unify_subs [] constraints;;
 
 (* applies a final set of substitutions on the annotated expr *)
 let rec apply_expr (subs: substitutions) (ae: aexpr): aexpr =
